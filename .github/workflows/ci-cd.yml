@@ -1,31 +1,71 @@
-  build:
-    name: Build Docker Image
-    needs: test
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/cloud-app
+
+jobs:
+  build-test-push:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-      - name: Checkout repository
+      # 1. Checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Docker Buildx
+      # 2. Install dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 3. Run tests
+      - name: Run tests
+        run: python -m pytest -v
+
+      # 4. Setup Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
+      # 5. Login to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push Docker Image
+      # 6. Build and push Docker image
+      - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/cloud-app:latest
-            ghcr.io/${{ github.repository_owner }}/cloud-app:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    needs: build-test-push
+    runs-on: ubuntu-latest
+
+    steps:
+      # 7. Pull and run Docker container
+      - name: Deploy container
+        run: |
+          docker pull $IMAGE_NAME:latest
+          docker run -d --name cloud-app -p 5000:5000 $IMAGE_NAME:latest
+          sleep 5
+
+      # 8. Check deployment
+      - name: Check deployment
+        run: |
+          curl --fail http://localhost:5000 -o response.txt
+          grep -q "Cloud Technologies" response.txt
+          echo "Deployment successful!"
