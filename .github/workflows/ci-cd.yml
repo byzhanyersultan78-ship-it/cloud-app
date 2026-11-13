@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 env:
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/cloud-app
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/cloud app
 
 jobs:
   build-test-push:
